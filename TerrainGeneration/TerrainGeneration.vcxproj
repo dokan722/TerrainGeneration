@@ -137,6 +137,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="camera.h" />
+    <ClInclude Include="CyclicBuffer2D.h" />
     <ClInclude Include="shader_m.h" />
   </ItemGroup>
   <ItemGroup>

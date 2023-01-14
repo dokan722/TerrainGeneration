@@ -7,28 +7,27 @@
 
 #include "shader_m.h"
 #include "camera.h"
+#include "CyclicBuffer2D.h"
 
 #include <iostream>
 #include <vector>
 #include <cmath>
+#include <random>
 
 void framebuffer_size_callback(GLFWwindow* window, int width, int height);
 void mouse_callback(GLFWwindow* window, double xpos, double ypos);
 void scroll_callback(GLFWwindow* window, double xoffset, double yoffset);
 void processInput(GLFWwindow* window);
 
-// settings
 const unsigned int SCR_WIDTH = 800;
 const unsigned int SCR_HEIGHT = 600;
 
-// camera
 Camera camera(glm::vec3(0.0f, 0.0f, 3.0f));
 float lastX = SCR_WIDTH / 2.0f;
 float lastY = SCR_HEIGHT / 2.0f;
 bool firstMouse = true;
 
-// timing
-float deltaTime = 0.0f;	// time between current frame and last frame
+float deltaTime = 0.0f;
 float lastFrame = 0.0f;
 
 void push_point(std::vector<float>& vec, float x, float y, float z)
@@ -40,7 +39,7 @@ void push_point(std::vector<float>& vec, float x, float y, float z)
 
 std::vector<float> generateChunk(std::vector<float> &ys)
 {
-    int size = 50;
+    int size = 51;
     std::vector<float> result;
     for (int i = 0; i < size - 1; ++i)
     {
@@ -58,33 +57,104 @@ std::vector<float> generateChunk(std::vector<float> &ys)
     return result;
 }
 
+
+float interpolate(float a0, float a1, float w)
+{
+    return (a1 - a0) * ((w * (w * 6.0 - 15.0) + 10.0) * w * w * w) + a0;
+}
+
+float random_param = 1.0;
+
+glm::vec2 randomGradient(int ix, int iy) {
+    const unsigned w = 8 * sizeof(unsigned);
+    const unsigned s = w / 2;
+    unsigned a = ix, b = iy;
+    a *= 3284157443; b ^= a << s | a >> w - s;
+    b *= 1911520717; a ^= b << s | b >> w - s;
+    a *= 2048419325;
+    float random = a * random_param;
+    glm::vec2 v;
+    v.x = cos(random); v.y = sin(random);
+    return v;
+}
+
+float dotGridGradient(int ix, int iy, float x, float y) {
+    glm::vec2 gradient = randomGradient(ix, iy);
+
+    float dx = x - (float)ix;
+    float dy = y - (float)iy;
+
+    return (dx * gradient.x + dy * gradient.y);
+}
+
+float perlin(float x, float y) {
+    int x0 = (int)floor(x);
+    int x1 = x0 + 1;
+    int y0 = (int)floor(y);
+    int y1 = y0 + 1;
+
+    float sx = x - (float)x0;
+    float sy = y - (float)y0;
+
+    float n0, n1, ix0, ix1, value;
+
+    n0 = dotGridGradient(x0, y0, x, y);
+    n1 = dotGridGradient(x1, y0, x, y);
+    ix0 = interpolate(n0, n1, sx);
+
+    n0 = dotGridGradient(x0, y1, x, y);
+    n1 = dotGridGradient(x1, y1, x, y);
+    ix1 = interpolate(n0, n1, sx);
+
+    value = interpolate(ix0, ix1, sy);
+    return value;
+}
+
 std::vector<float> generateHeights(float x0, float y0)
 {
     std::vector<float> result;
-    for (int i = 0; i < 2500; ++i)
+    for (int i = 0; i < 51; ++i)
     {
-        float x = i % 50 + x0;
-        float y = i / 50 + y0;
-        result.push_back(std::sin(x) * std::sin(y));
+        for (int j = 0; j < 51; ++j)
+        {
+            float x = i;
+            float y = j;
+            float x_fin = (x + x0 * 50) / 51;
+            float y_fin = (y + y0 * 50) / 51;
+            result.push_back(perlin(x_fin, y_fin) * 130);
+        }
     }
     return result;
 }
 
+glm::vec2 getIntCameraPos()
+{
+    glm::vec2 result;
+    result.x = (int)camera.Position.x;
+    result.y = (int)camera.Position.z;
+    return result;
+}
+
+void cyclicTest()
+{
+    
+}
+
 int main()
 {
-    // glfw: initialize and configure
-    // ------------------------------
+    
+
+
+    std::random_device rd;
+    std::mt19937 e2(rd());
+    std::uniform_real_distribution<> dist(0, 3);
+    random_param = dist(e2);
+
     glfwInit();
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
-    auto ys = generateHeights(0, 0);
-
-    auto vec = generateChunk(ys);
-
-    // glfw window creation
-    // --------------------
     GLFWwindow* window = glfwCreateWindow(SCR_WIDTH, SCR_HEIGHT, "LearnOpenGL", NULL, NULL);
     if (window == NULL)
     {
@@ -97,118 +167,98 @@ int main()
     glfwSetCursorPosCallback(window, mouse_callback);
     glfwSetScrollCallback(window, scroll_callback);
 
-    // tell GLFW to capture our mouse
     glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
-    // glad: load all OpenGL function pointers
-    // ---------------------------------------
+
     if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
     {
         std::cout << "Failed to initialize GLAD" << std::endl;
         return -1;
     }
 
-    // configure global opengl state
-    // -----------------------------
+
     glEnable(GL_DEPTH_TEST);
 
-    // build and compile our shader zprogram
-    // ------------------------------------
+
     Shader ourShader("camera.vs", "camera.fs");
 
-    // set up vertex data (and buffer(s)) and configure vertex attributes
-    // ------------------------------------------------------------------
-    std::vector<float> vertices = vec;
-    // world space positions of our cubes
-    glm::vec3 cubePositions[] = {
-        glm::vec3(0.0f,  0.0f,  0.0f),
-        glm::vec3(2.0f,  5.0f, -15.0f),
-        glm::vec3(-1.5f, -2.2f, -2.5f),
-        glm::vec3(-3.8f, -2.0f, -12.3f),
-        glm::vec3(2.4f, -0.4f, -3.5f),
-        glm::vec3(-1.7f,  3.0f, -7.5f),
-        glm::vec3(1.3f, -2.0f, -2.5f),
-        glm::vec3(1.5f,  2.0f, -2.5f),
-        glm::vec3(1.5f,  0.2f, -1.5f),
-        glm::vec3(-1.3f,  1.0f, -1.5f)
-    };
-    unsigned int VBO, VAO;
-    glGenVertexArrays(1, &VAO);
-    glGenBuffers(1, &VBO);
 
-    glBindVertexArray(VAO);
+    constexpr int RENDER_DISTANCE = 5;
+    constexpr int N_TILES = RENDER_DISTANCE * RENDER_DISTANCE;
 
-    glBindBuffer(GL_ARRAY_BUFFER, VBO);
-    glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(vertices[0]), vertices.data(), GL_STATIC_DRAW);
+    unsigned int VBO[N_TILES], VAO[N_TILES];
+    glGenVertexArrays(N_TILES, VAO);
+    glGenBuffers(N_TILES, VBO);
+    for (int i = 0; i < RENDER_DISTANCE; ++i)
+    {
+        for (int j = 0; j < RENDER_DISTANCE; ++j)
+        {
+            auto ys = generateHeights(i - (RENDER_DISTANCE / 2), j - (RENDER_DISTANCE / 2));
 
-    // position attribute
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
-    glEnableVertexAttribArray(0);
+            auto vertices = generateChunk(ys);
 
-    // render loop
-    // -----------
+            glBindVertexArray(VAO[i * RENDER_DISTANCE + j]);
+
+            glBindBuffer(GL_ARRAY_BUFFER, VBO[i * RENDER_DISTANCE + j]);
+            glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(vertices[0]), vertices.data(), GL_STATIC_DRAW);
+
+            glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+            glEnableVertexAttribArray(0);
+        }
+    }
+
+    
+
+
     while (!glfwWindowShouldClose(window))
     {
-        // per-frame time logic
-        // --------------------
         float currentFrame = static_cast<float>(glfwGetTime());
         deltaTime = currentFrame - lastFrame;
         lastFrame = currentFrame;
 
-        // input
-        // -----
+
         processInput(window);
 
-        // render
-        // ------
+
         glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        // activate shader
         ourShader.use();
 
-        // pass projection matrix to shader (note that in this case it could change every frame)
         glm::mat4 projection = glm::perspective(glm::radians(camera.Zoom), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 100.0f);
         ourShader.setMat4("projection", projection);
 
-        // camera/view transformation
         glm::mat4 view = camera.GetViewMatrix();
         ourShader.setMat4("view", view);
 
-        // render boxes
-        glBindVertexArray(VAO);
-        for (unsigned int i = 0; i < 1; i++)
+        glm::vec2 intCameraPos = getIntCameraPos();
+
+        std::cout << "Pos: x=" << intCameraPos.x << ", y =" << intCameraPos.y << std::endl;
+
+
+        for (int i = 0; i < RENDER_DISTANCE; ++i)
         {
-            // calculate the model matrix for each object and pass it to shader before drawing
-            glm::mat4 model = glm::mat4(1.0f); // make sure to initialize matrix to identity matrix first
-            model = glm::translate(model, cubePositions[i]);
-            float angle = 20.0f * i;
-            model = glm::rotate(model, glm::radians(angle), glm::vec3(1.0f, 0.3f, 0.5f));
-            model = glm::scale(model, glm::vec3(0.05, 0.05, 0.05));
-            ourShader.setMat4("model", model);
+            for (int j = 0; j < RENDER_DISTANCE; ++j)
+            {
+                glBindVertexArray(VAO[i * RENDER_DISTANCE + j]);
 
-            glDrawArrays(GL_TRIANGLES, 0, vertices.size() / 3);
+                glm::mat4 model = glm::mat4(1.0f);
+                model = glm::scale(model, glm::vec3(0.025, 0.025, 0.025));
+                model = glm::translate(model, glm::vec3(i - (RENDER_DISTANCE / 2) - 0.5, 0, j - (RENDER_DISTANCE / 2) - 0.5) * 50.0f);
+
+                ourShader.setMat4("model", model);
+
+                glDrawArrays(GL_TRIANGLES, 0, 3 * 2 * 50 * 50);
+            }
         }
-
-        // glfw: swap buffers and poll IO events (keys pressed/released, mouse moved etc.)
-        // -------------------------------------------------------------------------------
         glfwSwapBuffers(window);
         glfwPollEvents();
     }
 
-    // optional: de-allocate all resources once they've outlived their purpose:
-    // ------------------------------------------------------------------------
-    glDeleteVertexArrays(1, &VAO);
-    glDeleteBuffers(1, &VBO);
-
-    // glfw: terminate, clearing all previously allocated GLFW resources.
-    // ------------------------------------------------------------------
     glfwTerminate();
     return 0;
 }
 
-// process all input: query GLFW whether relevant keys are pressed/released this frame and react accordingly
-// ---------------------------------------------------------------------------------------------------------
 void processInput(GLFWwindow* window)
 {
     if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
@@ -224,18 +274,12 @@ void processInput(GLFWwindow* window)
         camera.ProcessKeyboard(RIGHT, deltaTime);
 }
 
-// glfw: whenever the window size changed (by OS or user resize) this callback function executes
-// ---------------------------------------------------------------------------------------------
 void framebuffer_size_callback(GLFWwindow* window, int width, int height)
 {
-    // make sure the viewport matches the new window dimensions; note that width and 
-    // height will be significantly larger than specified on retina displays.
     glViewport(0, 0, width, height);
 }
 
 
-// glfw: whenever the mouse moves, this callback is called
-// -------------------------------------------------------
 void mouse_callback(GLFWwindow* window, double xposIn, double yposIn)
 {
     float xpos = static_cast<float>(xposIn);
@@ -249,7 +293,7 @@ void mouse_callback(GLFWwindow* window, double xposIn, double yposIn)
     }
 
     float xoffset = xpos - lastX;
-    float yoffset = lastY - ypos; // reversed since y-coordinates go from bottom to top
+    float yoffset = lastY - ypos;
 
     lastX = xpos;
     lastY = ypos;
@@ -257,8 +301,6 @@ void mouse_callback(GLFWwindow* window, double xposIn, double yposIn)
     camera.ProcessMouseMovement(xoffset, yoffset);
 }
 
-// glfw: whenever the mouse scroll wheel scrolls, this callback is called
-// ----------------------------------------------------------------------
 void scroll_callback(GLFWwindow* window, double xoffset, double yoffset)
 {
     camera.ProcessMouseScroll(static_cast<float>(yoffset));
