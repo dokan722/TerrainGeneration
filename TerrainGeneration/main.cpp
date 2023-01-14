@@ -22,7 +22,7 @@ void processInput(GLFWwindow* window);
 const unsigned int SCR_WIDTH = 800;
 const unsigned int SCR_HEIGHT = 600;
 
-Camera camera(glm::vec3(0.0f, 0.0f, 3.0f));
+Camera camera(glm::vec3(0.0f, 0.0f, 0.0f));
 float lastX = SCR_WIDTH / 2.0f;
 float lastY = SCR_HEIGHT / 2.0f;
 bool firstMouse = true;
@@ -137,13 +137,44 @@ glm::vec2 getIntCameraPos()
 
 void cyclicTest()
 {
-    
+    std::vector<int> test_vec;
+    for (int i = 0; i < 25; ++i)
+        test_vec.push_back(i);
+
+    CyclicBuffer2D<int> test(test_vec, 5, 5);
+
+    auto x = test.MoveRight();
+    for (int i = 0; i < 5; ++i)
+    {
+        for (int j = 0; j < 5; ++j)
+            std::cout << test.getValue(i, j) << " ";
+        std::cout << std::endl;
+    }
+    auto y = test.MoveLeft();
+    for (int i = 0; i < 5; ++i)
+    {
+        for (int j = 0; j < 5; ++j)
+            std::cout << test.getValue(i, j) << " ";
+        std::cout << std::endl;
+    }
+    auto z = test.MoveUp();
+    for (int i = 0; i < 5; ++i)
+    {
+        for (int j = 0; j < 5; ++j)
+            std::cout << test.getValue(i, j) << " ";
+        std::cout << std::endl;
+    }
+    auto t = test.MoveDown();
+    for (int i = 0; i < 5; ++i)
+    {
+        for (int j = 0; j < 5; ++j)
+            std::cout << test.getValue(i, j) << " ";
+        std::cout << std::endl;
+    }
 }
 
 int main()
 {
-    
-
 
     std::random_device rd;
     std::mt19937 e2(rd());
@@ -183,7 +214,7 @@ int main()
     Shader ourShader("camera.vs", "camera.fs");
 
 
-    constexpr int RENDER_DISTANCE = 5;
+    constexpr int RENDER_DISTANCE = 7;
     constexpr int N_TILES = RENDER_DISTANCE * RENDER_DISTANCE;
 
     unsigned int VBO[N_TILES], VAO[N_TILES];
@@ -206,10 +237,17 @@ int main()
             glEnableVertexAttribArray(0);
         }
     }
+    std::vector<unsigned int> VAOBuffer;
+    for (int i = 0; i < N_TILES; ++i)
+        VAOBuffer.push_back(VAO[i]);
+
+    CyclicBuffer2D<unsigned int> VAOCycBuffer(VAOBuffer, RENDER_DISTANCE, RENDER_DISTANCE);
 
     
 
-
+    glm::vec2 prevCameraPos(0, 0);
+    int offsetx = 0;
+    int offsety = 0;
     while (!glfwWindowShouldClose(window))
     {
         float currentFrame = static_cast<float>(glfwGetTime());
@@ -231,26 +269,110 @@ int main()
         glm::mat4 view = camera.GetViewMatrix();
         ourShader.setMat4("view", view);
 
-        glm::vec2 intCameraPos = getIntCameraPos();
+        glm::vec2 currIntCameraPos = getIntCameraPos();
 
-        std::cout << "Pos: x=" << intCameraPos.x << ", y =" << intCameraPos.y << std::endl;
+        //std::cout << "Pos: x=" << currIntCameraPos.x << ", z =" << currIntCameraPos.y << std::endl;
+
+
+        glm::vec2 move = currIntCameraPos - prevCameraPos;
+        offsetx += move.x;
+        offsety += move.y;
+
+
+        if (move.x > 0)
+        {
+            auto result = VAOCycBuffer.MoveDown();
+            for (int i = 0; i < RENDER_DISTANCE; ++i)
+            {
+                auto ys = generateHeights(currIntCameraPos.x + RENDER_DISTANCE / 2, currIntCameraPos.y - RENDER_DISTANCE / 2 + i);
+
+                auto vertices = generateChunk(ys);
+
+                glBindVertexArray(result[i]);
+
+                glBindBuffer(GL_ARRAY_BUFFER, result[i]);
+                glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(vertices[0]), vertices.data(), GL_STATIC_DRAW);
+
+                glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+                glEnableVertexAttribArray(0);
+            }
+        }
+        if (move.x < 0)
+        {
+            auto result = VAOCycBuffer.MoveUp();
+            for (int i = 0; i < RENDER_DISTANCE; ++i)
+            {
+                auto ys = generateHeights(currIntCameraPos.x - RENDER_DISTANCE / 2, currIntCameraPos.y - RENDER_DISTANCE / 2 + i);
+
+                auto vertices = generateChunk(ys);
+
+                glBindVertexArray(result[i]);
+
+                glBindBuffer(GL_ARRAY_BUFFER, result[i]);
+                glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(vertices[0]), vertices.data(), GL_STATIC_DRAW);
+
+                glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+                glEnableVertexAttribArray(0);
+            }
+        }
+        if (move.y > 0)
+        {
+            auto result = VAOCycBuffer.MoveRight();
+            for (int i = 0; i < RENDER_DISTANCE; ++i)
+            {
+                auto ys = generateHeights(currIntCameraPos.x - RENDER_DISTANCE / 2 + i, currIntCameraPos.y + RENDER_DISTANCE / 2);
+
+                auto vertices = generateChunk(ys);
+
+                glBindVertexArray(result[i]);
+
+                glBindBuffer(GL_ARRAY_BUFFER, result[i]);
+                glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(vertices[0]), vertices.data(), GL_STATIC_DRAW);
+
+                glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+                glEnableVertexAttribArray(0);
+            }
+        }
+        if (move.y < 0)
+        {
+            auto result = VAOCycBuffer.MoveLeft();
+            for (int i = 0; i < RENDER_DISTANCE; ++i)
+            {
+                auto ys = generateHeights(currIntCameraPos.x - RENDER_DISTANCE / 2 + i, currIntCameraPos.y - RENDER_DISTANCE / 2);
+
+                auto vertices = generateChunk(ys);
+
+                glBindVertexArray(result[i]);
+
+                glBindBuffer(GL_ARRAY_BUFFER, result[i]);
+                glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(vertices[0]), vertices.data(), GL_STATIC_DRAW);
+
+                glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+                glEnableVertexAttribArray(0);
+            }
+        }
+
 
 
         for (int i = 0; i < RENDER_DISTANCE; ++i)
         {
             for (int j = 0; j < RENDER_DISTANCE; ++j)
             {
-                glBindVertexArray(VAO[i * RENDER_DISTANCE + j]);
+                //glBindVertexArray(VAO[i * RENDER_DISTANCE + j]);
+                glBindVertexArray(VAOCycBuffer.getValue(i, j));
 
                 glm::mat4 model = glm::mat4(1.0f);
                 model = glm::scale(model, glm::vec3(0.025, 0.025, 0.025));
-                model = glm::translate(model, glm::vec3(i - (RENDER_DISTANCE / 2) - 0.5, 0, j - (RENDER_DISTANCE / 2) - 0.5) * 50.0f);
+                glm::vec3 moveForCameraVector(offsetx + (camera.Position.x - (int) camera.Position.x), 0, offsety + (camera.Position.z - (int)camera.Position.z));
+                model = glm::translate(model, glm::vec3(i - (RENDER_DISTANCE / 2) - 0.5, 0, j - (RENDER_DISTANCE / 2) - 0.5) * 50.0f + moveForCameraVector * 40.0f);
 
                 ourShader.setMat4("model", model);
 
                 glDrawArrays(GL_TRIANGLES, 0, 3 * 2 * 50 * 50);
             }
         }
+        prevCameraPos = currIntCameraPos;
+
         glfwSwapBuffers(window);
         glfwPollEvents();
     }

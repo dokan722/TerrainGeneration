@@ -45,7 +45,7 @@ public:
 	{
 		std::vector<T> replacement;
 		for (int i = 0; i < width; ++i)
-			buffer[i] = replacement[i];
+			replacement.push_back(buffer[i]);
 		for (int i = 0; i < height - 1; ++i)
 		{
 			for (int j = 0; j < width; ++j)
@@ -60,7 +60,7 @@ public:
 	{
 		std::vector<T> replacement;
 		for (int i = 0; i < width; ++i)
-			buffer[(height - 1) * width + i] = replacement[i];
+			replacement.push_back(buffer[(height - 1) * width + i]);
 		for (int i = height - 1; i > 0; --i)
 		{
 			for (int j = 0; j < width; ++j)
@@ -69,5 +69,10 @@ public:
 		for (int i = 0; i < width; ++i)
 			buffer[i] = replacement[i];
 		return replacement;
+	}
+
+	T& getValue(int x, int y)
+	{
+		return buffer[x * width + y];
 	}
 };
