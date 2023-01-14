@@ -246,8 +246,6 @@ int main()
     
 
     glm::vec2 prevCameraPos(0, 0);
-    int offsetx = 0;
-    int offsety = 0;
     while (!glfwWindowShouldClose(window))
     {
         float currentFrame = static_cast<float>(glfwGetTime());
@@ -275,8 +273,6 @@ int main()
 
 
         glm::vec2 move = currIntCameraPos - prevCameraPos;
-        offsetx += move.x;
-        offsety += move.y;
 
 
         if (move.x > 0)
@@ -363,7 +359,7 @@ int main()
 
                 glm::mat4 model = glm::mat4(1.0f);
                 model = glm::scale(model, glm::vec3(0.025, 0.025, 0.025));
-                glm::vec3 moveForCameraVector(offsetx + (camera.Position.x - (int) camera.Position.x), 0, offsety + (camera.Position.z - (int)camera.Position.z));
+                glm::vec3 moveForCameraVector(currIntCameraPos.x, 0, currIntCameraPos.y);
                 model = glm::translate(model, glm::vec3(i - (RENDER_DISTANCE / 2) - 0.5, 0, j - (RENDER_DISTANCE / 2) - 0.5) * 50.0f + moveForCameraVector * 40.0f);
 
                 ourShader.setMat4("model", model);
